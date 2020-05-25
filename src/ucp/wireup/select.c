@@ -512,7 +512,6 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
             } else if (!is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
                 /* Found non-proxy lane with same resource - don't add */
                 ucs_assert_always(!proxy_changed);
-                lane_desc->lane_types |= UCS_BIT(lane_type);
                 goto out_update_score;
             }
         }
@@ -537,13 +536,14 @@ out_add_lane:
     lane_desc->path_index   = select_info->path_index;
     lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
-    lane_desc->lane_types   = UCS_BIT(lane_type);
+    lane_desc->lane_types   = 0;
     for (lane_type_iter = 0; lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
         lane_desc->score[lane_type_iter] = 0.0;
     }
 
 out_update_score:
+    lane_desc->lane_types      |= UCS_BIT(lane_type);
     lane_desc->score[lane_type] = select_info->score;
     return UCS_OK;
 }
