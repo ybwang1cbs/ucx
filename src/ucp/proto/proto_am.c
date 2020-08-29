@@ -111,3 +111,40 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self,
         req->send.state.uct_comp.func = NULL;
     }
 }
+
+static size_t ucp_proto_tiny_am_pack(void *dest, void *arg)
+{
+    ucp_request_t *req = arg;
+
+    memcpy(dest, req->send.tiny_am.payload, req->send.tiny_am.length);
+    return req->send.tiny_am.length;
+}
+
+static ucs_status_t ucp_proto_tiny_am_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    // TODO avoid calling pack if inline
+    // TODO select inline lane if possible
+    return ucp_proto_am_bcopy_single_progress(req, req->send.tiny_am.am_id,
+                                              req->send.tiny_am.lane,
+                                              ucp_proto_tiny_am_pack,
+                                              req->send.tiny_am.length,
+                                              req->send.tiny_am.comp_cb);
+}
+
+void ucp_proto_tiny_am_send(ucp_request_t *req, ucp_lane_index_t lane,
+                            uint8_t am_id, const void *payload, size_t length,
+                            ucp_proto_complete_cb_t comp_cb)
+{
+    ucs_assert(length <= UCP_REQUEST_TINY_AM_MAX);
+    ucs_assert(length <= UINT8_MAX);
+
+    req->send.uct.func        = ucp_proto_tiny_am_progress;
+    req->send.tiny_am.comp_cb = comp_cb;
+    req->send.tiny_am.am_id   = am_id;
+    req->send.tiny_am.length  = length;
+    req->send.tiny_am.lane    = lane;
+    memcpy(req->send.tiny_am.payload, payload, length);
+
+    ucp_request_send(req, 0);
+}

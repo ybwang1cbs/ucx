@@ -142,10 +142,6 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         goto out_release_config;
     }
 
-    if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
-        ucp_mem_print_info(mem_size, context, stdout);
-    }
-
     if (print_opts & PRINT_UCP_CONTEXT) {
         ucp_context_print_info(context, stdout);
         print_resource_usage(&usage, "UCP context");
@@ -192,6 +188,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
         ucp_ep_print_info(ep, stdout);
 
+        if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
+            ucp_mem_print_info(mem_size, context, ep, stdout);
+        }
+
         status_ptr = ucp_disconnect_nb(ep);
         if (UCS_PTR_IS_PTR(status_ptr)) {
             do {
@@ -199,6 +199,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                 status = ucp_request_test(status_ptr, NULL);
             } while (status == UCS_INPROGRESS);
             ucp_request_release(status_ptr);
+        }
+    } else {
+        if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
+            ucp_mem_print_info(mem_size, context, NULL, stdout);
         }
     }
 

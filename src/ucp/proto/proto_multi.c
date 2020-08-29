@@ -10,6 +10,7 @@
 
 #include "proto_multi.h"
 #include "proto_common.h"
+#include "proto_multi.inl"
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -31,7 +32,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
     /* Find first lane */
-    mpriv->num_lanes = ucp_proto_common_find_lanes(&params->super,
+    mpriv->num_lanes = ucp_proto_common_find_lanes(&params->super.super,
+                                                   params->super.flags,
                                                    params->first.lane_type,
                                                    params->first.tl_cap_flags,
                                                    1, 0, lanes, &reg_md_map);
@@ -43,7 +45,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     mpriv->reg_md_map = reg_md_map;
 
     /* Find rest of the lanes */
-    mpriv->num_lanes  += ucp_proto_common_find_lanes(&params->super,
+    mpriv->num_lanes  += ucp_proto_common_find_lanes(&params->super.super,
+                                                     params->super.flags,
                                                      params->middle.lane_type,
                                                      params->middle.tl_cap_flags,
                                                      params->max_lanes - 1,
@@ -83,7 +86,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
 
     /* Set up the relative weights */
     for (i = 0; i < mpriv->num_lanes; ++i) {
-        mpriv->lanes[i].weight = lanes_bandwidth[i] / total_bandwidth;
+        mpriv->lanes[i].weight = ucs_proto_multi_calc_weight(lanes_bandwidth[i],
+                                                             total_bandwidth);
     }
 
     ucp_proto_common_calc_perf(&params->super, &perf_params);
@@ -95,16 +99,22 @@ void ucp_proto_multi_config_str(const void *priv, ucs_string_buffer_t *strb)
 {
     const ucp_proto_multi_priv_t *mpriv = priv;
     const ucp_proto_multi_lane_priv_t *lpriv;
+    size_t percent, remaining;
     ucp_lane_index_t i;
 
+    remaining = 100;
     ucs_string_buffer_init(strb);
     for (i = 0; i < mpriv->num_lanes; ++i) {
         if (i > 0) {
             ucs_string_buffer_appendf(strb, " ");
         }
 
-        lpriv = &mpriv->lanes[i];
-        ucs_string_buffer_appendf(strb, "%.0f%% ", 100.0 * lpriv->weight);
+        lpriv      = &mpriv->lanes[i];
+        percent    = ucs_min(remaining,
+                             ucp_proto_multi_scaled_length(lpriv, 100));
+        remaining -= percent;
+
+        ucs_string_buffer_appendf(strb, "%zu%% ", percent);
         ucp_proto_common_lane_priv_str(&lpriv->super, strb);
     }
 }

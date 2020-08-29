@@ -13,6 +13,8 @@
 #include <ucp/dt/datatype_iter.h>
 
 
+#define UCP_PROTO_MULTI_WEIGHT_SHIFT   16
+
 /**
  * UCP base protocol definition for multi-fragment protocols
  */
@@ -29,7 +31,7 @@ typedef struct ucp_proto_send_multi {
 typedef struct {
     ucp_proto_common_lane_priv_t   super;
     size_t                         max_frag;   /* Max frag size on this lane */
-    double                         weight;     /* Relative weight for this lane */
+    size_t                         weight;     /* Relative weight for this lane */
 } ucp_proto_multi_lane_priv_t;
 
 

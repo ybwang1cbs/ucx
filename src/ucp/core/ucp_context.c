@@ -55,6 +55,8 @@ const char* ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
     [UCP_OP_ID_PUT]           = "put",
     [UCP_OP_ID_GET]           = "get",
+    [UCP_OP_ID_RNDV_SEND]     = "rndv_send",
+    [UCP_OP_ID_RNDV_RECV]     = "rndv_recv",
     [UCP_OP_ID_LAST]          = NULL
 };
 
@@ -121,7 +123,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
 
-  {"BCOPY_THRESH", "0",
+  {"BCOPY_THRESH", UCS_VALUE_AUTO_STR,
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 

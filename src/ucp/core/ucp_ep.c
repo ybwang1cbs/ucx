@@ -15,6 +15,7 @@
 #include "ucp_rkey.h"
 #include "ucp_ep.inl"
 #include "ucp_request.inl"
+#include "ucp_rkey.h"
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
@@ -26,6 +27,7 @@
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
@@ -1487,7 +1489,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.eager.zcopy_auto_thresh = 0;
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
-    config->bcopy_thresh                = context->config.ext.bcopy_thresh;
+    if (context->config.ext.bcopy_thresh == UCS_MEMUNITS_AUTO) {
+        config->bcopy_thresh            = 0;
+    } else {
+        config->bcopy_thresh            = context->config.ext.bcopy_thresh;
+    }
     config->tag.lane                    = UCP_NULL_LANE;
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;

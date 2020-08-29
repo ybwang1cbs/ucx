@@ -11,6 +11,8 @@
 #include "tag_rndv.h"
 #include "tag_match.inl"
 
+#include <ucp/rndv/proto_rndv.inl>
+
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
                           const ucp_rndv_rts_hdr_t *rts_hdr)
@@ -21,7 +23,11 @@ void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.tag.info.sender_tag = rts_hdr->tag.tag;
     rreq->recv.tag.info.length     = rts_hdr->size;
 
-    ucp_rndv_receive(worker, rreq, rts_hdr);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_proto_rndv_receive(worker, rreq, rts_hdr);
+    } else {
+        ucp_rndv_receive(worker, rreq, rts_hdr);
+    }
 }
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
@@ -106,3 +112,40 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     return status;
 }
 
+static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
+{
+    ucp_rndv_rts_hdr_t *rndv_rts_hdr = dest;
+    ucp_request_t *req               = arg;
+
+    rndv_rts_hdr->tag.tag = req->send.msg_proto.tag.tag;
+    return ucp_proto_rndv_rts_pack(req, dest);
+}
+
+static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req                     = ucs_container_of(self, ucp_request_t,
+                                                              send.uct);
+    const ucp_proto_remote_op_priv_t *rpriv = req->send.proto_config->priv;
+    size_t max_rts_size                    = sizeof(ucp_rndv_rts_hdr_t) +
+                                             rpriv->packed_rkey_size;
+    ucs_status_t status;
+
+    status = ucp_proto_rndv_rts_request_init(req);
+    if (status != UCS_OK) {
+        return UCS_OK; /* complete the operation */
+    }
+
+    return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTS,
+                                              rpriv->lane,
+                                              ucp_tag_rndv_proto_rts_pack,
+                                              max_rts_size, NULL);
+}
+
+static ucp_proto_t ucp_tag_rndv_proto = {
+    .name       = "tag/rndv",
+    .flags      = 0,
+    .init       = ucp_proto_rndv_init,
+    .config_str = ucp_proto_remote_op_config_str,
+    .progress   = ucp_tag_rndv_rts_progress
+};
+UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

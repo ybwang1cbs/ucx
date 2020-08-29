@@ -208,6 +208,8 @@ typedef struct ucp_context {
 
         /* Bitmap of features supported by the context */
         uint64_t                  features;
+
+        /* Which bits of UCP tag uniquely identify the sender */
         uint64_t                  tag_sender_mask;
 
         /* How many endpoints are expected to be created */

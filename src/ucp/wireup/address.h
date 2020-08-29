@@ -7,10 +7,9 @@
 #ifndef UCP_ADDRESS_H_
 #define UCP_ADDRESS_H_
 
-#include "wireup.h"
-
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_worker.h>
 #include <ucs/sys/math.h>
 
 
@@ -21,6 +20,7 @@ enum {
          UCT_IFACE_FLAG_CB_SYNC |
          UCT_IFACE_FLAG_CB_ASYNC |
          UCT_IFACE_FLAG_AM_BCOPY |
+         UCT_IFACE_FLAG_AM_ZCOPY |
          UCT_IFACE_FLAG_PUT_SHORT |
          UCT_IFACE_FLAG_PUT_BCOPY |
          UCT_IFACE_FLAG_PUT_ZCOPY |

@@ -28,8 +28,8 @@
 #include <uct/tcp/tcp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
-#include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/datatype_iter.h>
 #include <ucp/wireup/wireup.h>

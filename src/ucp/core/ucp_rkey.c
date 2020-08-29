@@ -513,3 +513,13 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
               rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
               rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
 }
+
+void ucp_rkey_print_info(ucp_ep_h ep, ucp_rkey_h rkey, FILE *stream)
+{
+    fprintf(stream, "#  rkey %p md_map 0x%lx mem_type '%s' cfg_index %d\n",
+            rkey, rkey->md_map, ucs_memory_type_names[rkey->mem_type],
+            rkey->cfg_index);
+    ucp_proto_select_dump(ep->worker, ep->cfg_index, rkey->cfg_index,
+                          &ep->worker->rkey_config[rkey->cfg_index].proto_select,
+                          stream);
+}

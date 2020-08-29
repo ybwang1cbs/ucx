@@ -7,8 +7,10 @@
 #ifndef UCP_PROTO_AM_H_
 #define UCP_PROTO_AM_H_
 
+#include "proto_common.h"
+
 #include <ucp/core/ucp_types.h>
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 
 
 /**
@@ -38,5 +40,9 @@ ucs_status_t ucp_proto_progress_am_single(uct_pending_req_t *self);
 void ucp_proto_am_zcopy_completion(uct_completion_t *self, ucs_status_t status);
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
+
+void ucp_proto_tiny_am_send(ucp_request_t *req, ucp_lane_index_t lane,
+                            uint8_t am_id, const void *payload, size_t length,
+                            ucp_proto_complete_cb_t comp_cb);
 
 #endif

@@ -73,6 +73,8 @@ typedef struct {
 typedef struct {
     const ucp_proto_t        *proto;       /* Protocol definition */
     const void               *priv;        /* Protocol private configuration space */
+    ucp_worker_cfg_index_t   ep_cfg_index;    /* NEW */
+    ucp_worker_cfg_index_t   rkey_cfg_index;  /* NEW */
     ucp_proto_select_param_t select_param; /* Copy of protocol selection parameters,
                                               used to re-select protocol for existing
                                               in-progress request */
@@ -111,6 +113,7 @@ typedef struct {
     /* Input parameters */
     ucp_worker_h                   worker;           /* Worker to initialize on */
     const ucp_proto_select_param_t *select_param;    /* Operation parameters */
+    ucp_worker_cfg_index_t         ep_cfg_index;     /* Endpoint configuration index */
     const ucp_ep_config_key_t      *ep_config_key;   /* Endpoint configuration */
     const ucp_rkey_config_key_t    *rkey_config_key; /* Remote key configuration,
                                                         may be NULL */

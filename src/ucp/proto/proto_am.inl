@@ -8,12 +8,14 @@
 #define UCP_PROTO_AM_INL_
 
 #include "proto_am.h"
-
+#include "proto_multi.h"
+#include "proto_single.h"
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
+#include <ucp/proto/proto_common.inl>
 #include <ucs/profile/profile.h>
 
 
@@ -44,6 +46,89 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                 "packed_len=%zd max_bcopy=%zu",
                 packed_len, ucp_ep_get_max_bcopy(ep, req->send.lane));
 
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
+                                   ucp_lane_index_t lane,
+                                   uct_pack_callback_t pack_func,
+                                   size_t max_packed_size,
+                                   ucp_proto_complete_cb_t complete_func)
+{
+    ucp_ep_t *ep                       = req->send.ep;
+    const uct_iface_attr_t *iface_attr = ucp_ep_get_iface_attr(ep, lane);
+    ucs_status_t status;
+    ssize_t packed_size;
+    uint64_t *buffer;
+
+    if ((max_packed_size <= UCS_ALLOCA_MAX_SIZE) &&
+        (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
+        (max_packed_size <= iface_attr->cap.am.max_short)) {
+
+        /* Send as inline if expected size is small enough */
+        buffer      = ucs_alloca(max_packed_size);
+        packed_size = pack_func(buffer, req);
+        ucs_assertv((packed_size >= 0) && (packed_size <= max_packed_size),
+                    "packed_size=%zd max_packed_size=%zu", packed_size,
+                    max_packed_size);
+        status = uct_ep_am_short(ep->uct_eps[lane], am_id, buffer[0],
+                                 &buffer[1], packed_size - sizeof(buffer[0]));
+        if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+            req->send.lane = lane;
+            return UCS_ERR_NO_RESOURCE;
+        }
+    } else {
+        /* Send as bcopy */
+        packed_size = uct_ep_am_bcopy(ep->uct_eps[lane], am_id, pack_func, req, 0);
+        if (ucs_likely(packed_size >= 0)) {
+            status = UCS_OK;
+        } else if (ucs_unlikely(packed_size == UCS_ERR_NO_RESOURCE)) {
+            req->send.lane = lane;
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            status = (ucs_status_t)packed_size;
+        }
+    }
+
+    if (complete_func != NULL) {
+        complete_func(req, status);
+    }
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_am_zcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
+                                   const void *hdr, size_t hdr_size)
+{
+    ucp_ep_t *ep                         = req->send.ep;
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucp_datatype_iter_t next_iter;
+    ucs_status_t status;
+    uct_iov_t iov;
+
+    ucs_assert(req->send.dt_iter.offset == 0);
+
+    ucp_datatype_iter_next_iov(&req->send.dt_iter, spriv->super.memh_index,
+                               SIZE_MAX, &next_iter, &iov);
+    status = uct_ep_am_zcopy(ep->uct_eps[spriv->super.lane], am_id, hdr,
+                             hdr_size, &iov, 1, 0, &req->send.state.uct_comp);
+    UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_only", iov.length,
+                                           status);
+    if (ucs_likely(status == UCS_OK)) {
+        /* fastpath is UCS_OK */
+    } else if (status == UCS_INPROGRESS) {
+        /* completion callback will be called */
+        return UCS_OK;
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        /* keep on pending queue */
+        req->send.lane = spriv->super.lane;
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* complete the request with OK or error */
+    ucp_proto_request_zcopy_complete(req, status);
     return UCS_OK;
 }
 

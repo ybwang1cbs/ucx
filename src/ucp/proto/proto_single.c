@@ -24,9 +24,11 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
     ucp_md_map_t reg_md_map;
     ucp_lane_index_t lane;
 
-    num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
-                                            params->tl_cap_flags, 1, 0, &lane,
-                                            &reg_md_map);
+    num_lanes = ucp_proto_common_find_lanes(&params->super.super,
+                                            params->super.flags,
+                                            params->lane_type,
+                                            params->tl_cap_flags,
+                                            1, 0, &lane, &reg_md_map);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s", params->super.super.proto_name);
         return UCS_ERR_UNSUPPORTED;

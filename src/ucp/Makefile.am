@@ -49,6 +49,7 @@ noinst_HEADERS = \
 	proto/proto_am.inl \
 	proto/proto_common.h \
 	proto/proto_common.inl \
+	proto/proto_remote_op.h \
 	proto/proto_multi.h \
 	proto/proto_select.h \
 	proto/proto_select.inl \
@@ -57,6 +58,8 @@ noinst_HEADERS = \
 	rma/rma.h \
 	rma/rma.inl \
 	rndv/rndv.h \
+	rndv/proto_rndv.h \
+	rndv/proto_rndv.inl \
 	tag/eager.h \
 	tag/tag_rndv.h \
 	tag/tag_match.h \
@@ -102,6 +105,8 @@ libucp_la_SOURCES = \
 	proto/lane_type.c \
 	proto/proto_am.c \
 	proto/proto_common.c \
+	proto/proto_reconfig.c \
+	proto/proto_remote_op.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \
 	proto/proto_single.c \
@@ -109,6 +114,8 @@ libucp_la_SOURCES = \
 	rma/amo_basic.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
+	rma/get_am.c \
+	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
 	rma/rma_basic.c \
@@ -116,6 +123,10 @@ libucp_la_SOURCES = \
 	rma/rma_sw.c \
 	rma/flush.c \
 	rndv/rndv.c \
+	rndv/proto_rndv.c \
+	rndv/rndv_get.c \
+	rndv/rndv_put.c \
+	rndv/rndv_rtr.c \
 	tag/eager_multi.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \

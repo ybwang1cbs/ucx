@@ -192,8 +192,8 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
     }
 
     /* Unexpected error while adding to pending */
-    ucs_fatal("invalid return status from uct_ep_pending_add(): %s",
-              ucs_status_string(status));
+    ucs_fatal("invalid return status from uct_ep_pending_add(lane=%d): %s",
+              req->send.lane, ucs_status_string(status));
 }
 
 static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
@@ -435,4 +435,21 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
     }
 
     return UCS_ERR_MESSAGE_TRUNCATED;
+}
+
+ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
+{
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_t *proto = req->send.proto_config->proto;
+    ucs_status_t status;
+
+    ucp_trace_req(req, "progress protocol %s ep_cfg[%d] rkey_cfg[%d]",
+                  proto->name, req->send.proto_config->ep_cfg_index,
+                  req->send.proto_config->rkey_cfg_index);
+    status = proto->progress(self);
+    if (status != UCS_OK) {
+        ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
+                      proto->name, ucs_status_string(status), req->send.lane);
+    }
+    return status;
 }

@@ -16,8 +16,11 @@
 #include <ucp/tag/tag_rndv.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
+#include <ucp/core/ucp_rkey.h>
+#include <ucp/rndv/proto_rndv.inl>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
+
 
 static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
                                             const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
@@ -247,14 +250,17 @@ ucp_rndv_adjust_zcopy_length(size_t min_zcopy, size_t max_zcopy, size_t align,
 
 static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
 {
-    ucp_request_send_generic_dt_finish(sreq);
-    ucp_request_send_buffer_dereg(sreq);
-    ucp_request_complete_send(sreq, status);
+    if (sreq->send.ep->worker->context->config.ext.proto_enable) {
+        ucp_proto_request_zcopy_complete(sreq, status);
+    } else {
+        ucp_request_send_generic_dt_finish(sreq);
+        ucp_request_send_buffer_dereg(sreq);
+        ucp_request_complete_send(sreq, status);
+    }
 }
 
-static void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                  ucs_ptr_map_key_t remote_req_id,
-                                  ucs_status_t status)
+void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
+                           ucs_ptr_map_key_t remote_req_id, ucs_status_t status)
 {
     ucp_trace_req(rndv_req, "send ats remote_req_id 0x%"PRIxPTR, remote_req_id);
     UCS_PROFILE_REQUEST_EVENT(rreq, "send_ats", 0);
@@ -1590,9 +1596,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
 {
+    ucp_worker_h worker      = arg;
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *req       = ucp_worker_get_request_by_id(arg,
                                                             rep_hdr->req_id);
+
+    if (worker->context->config.ext.proto_enable) {
+        return ucp_proto_rndv_rtr_handle_atp(arg, data, length, flags);
+    }
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
@@ -1626,6 +1637,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
+
+    if (context->config.ext.proto_enable) {
+        return ucp_proto_rndv_handle_rtr(arg, data, length, flags);
+    }
 
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
         /* Do not deregister memory here, because am zcopy rndv may

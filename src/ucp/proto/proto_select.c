@@ -9,6 +9,7 @@
 #endif
 
 #include "proto_select.h"
+#include "proto_single.h" // TODO remove
 #include "proto_select.inl"
 
 #include <ucp/core/ucp_context.h>
@@ -67,9 +68,7 @@ ucp_proto_thresholds_append(ucs_array_t(ucp_proto_thresh) *thresh_list,
     /* Consolidate with last protocol if possible */
     if (!ucs_array_is_empty(thresh_list)) {
         thresh_elem = ucs_array_last(thresh_list);
-        ucs_assertv(max_length > thresh_elem->max_length,
-                    "max_length=%zu last->max_length=%zu",
-                    max_length, thresh_elem->max_length);
+        ucs_assert(max_length > thresh_elem->max_length);
         if (thresh_elem->proto_id == proto_id) {
             thresh_elem->max_length = max_length;
             return UCS_OK;
@@ -152,7 +151,8 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
             curr.result = ucs_linear_func_apply(proto_perf[curr.proto_id],
                                                 start + UCP_PROTO_MSGLEN_EPSILON);
             ucs_assert(curr.result != DBL_MAX);
-            if (curr.result < best.result) {
+            if ((best.proto_id == UCP_PROTO_ID_INVALID) ||
+                (curr.result < best.result)) {
                 best = curr;
             }
         }
@@ -342,6 +342,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 
     init_params.worker        = worker;
     init_params.select_param  = select_param;
+    init_params.ep_cfg_index  = ep_cfg_index;
     init_params.ep_config_key = &worker->ep_config[ep_cfg_index].key;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
@@ -618,6 +619,12 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     key.param = *select_param;
     khiter    = kh_put(ucp_proto_select_hash, &proto_select->hash, key.u64,
                        &khret);
+    if (khret == UCS_KH_PUT_KEY_PRESENT) {
+        ucs_assert(khiter != kh_end(&proto_select->hash));
+        select_elem = &kh_value(&proto_select->hash, khiter);
+        goto out;
+    }
+
     ucs_assert_always((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
                       (khret == UCS_KH_PUT_BUCKET_CLEAR));
 
@@ -634,6 +641,7 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
         return NULL;
     }
 
+out:
     return select_elem;
 }
 
@@ -850,6 +858,7 @@ ucp_proto_select_elem_dump(ucp_worker_h worker,
                               select_param, stream);
 }
 
+// TODO dump to string buffer
 void ucp_proto_select_dump(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
@@ -891,4 +900,41 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
         ucs_string_buffer_appendf(strb, " and fast completion");
     }
+}
+
+void
+ucp_proto_select_get_short(ucp_worker_h worker, ucp_proto_select_t *proto_select,
+                           ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           ucp_operation_id_t op_id, uint32_t op_attr_mask,
+                           unsigned proto_flags,
+                           ucp_proto_select_short_t *proto_short)
+{
+    ucp_context_h context       = worker->context;
+    const ucp_proto_threshold_elem_t *thresh;
+    ucp_proto_select_param_t select_param;
+    const ucp_proto_single_priv_t *spriv;
+
+    ucp_proto_select_param_init(&select_param, op_id, op_attr_mask,
+                                UCP_DATATYPE_CONTIG, UCS_MEMORY_TYPE_HOST, 1);
+    thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
+                                     rkey_cfg_index, &select_param, 0);
+    if ((thresh == NULL) ||
+        !ucs_test_all_flags(thresh->proto_config.proto->flags, proto_flags)) {
+        /* the protocol for smallest messages is not short */
+        proto_short->memtype_on_thresh  = -1;
+        proto_short->memtype_off_thresh = -1;
+        proto_short->lane               = UCP_NULL_LANE;
+        proto_short->rkey_index         = UCP_NULL_RESOURCE;
+        return;
+    }
+
+    proto_short->memtype_on_thresh  = thresh->max_msg_length;
+    proto_short->memtype_off_thresh = (context->num_mem_type_detect_mds > 0) ?
+                                      -1 : thresh->max_msg_length;
+
+    /* assume short protocol uses 'ucp_proto_single_priv_t' */
+    spriv                           = thresh->proto_config.priv;
+    proto_short->lane               = spriv->super.lane;
+    proto_short->rkey_index         = spriv->super.rkey_index;
 }

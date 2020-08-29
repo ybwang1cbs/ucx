@@ -97,15 +97,15 @@ ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
 }
 
 ucp_lane_index_t
-ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
+ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params, unsigned flags,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
                             ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
                             ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p)
 {
-    ucp_context_h context                        = params->super.worker->context;
-    const ucp_ep_config_key_t *ep_config_key     = params->super.ep_config_key;
-    const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
-    const ucp_proto_select_param_t *select_param = params->super.select_param;
+    ucp_context_h context                        = params->worker->context;
+    const ucp_ep_config_key_t *ep_config_key     = params->ep_config_key;
+    const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
+    const ucp_proto_select_param_t *select_param = params->select_param;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_t *md_attr;
@@ -116,11 +116,12 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 
     ucp_proto_select_param_str(select_param, &strb);
     ucs_trace("selecting %d out of %d lanes for %s %s", max_lanes,
-              ep_config_key->num_lanes, params->super.proto_name,
+              ep_config_key->num_lanes, params->proto_name,
               ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
 
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+    if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        ucs_assert(!(flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY));
         if ((select_param->dt_class == UCP_DATATYPE_GENERIC) ||
             (select_param->dt_class == UCP_DATATYPE_IOV)) {
             /* Generic/IOV datatype cannot be used with zero-copy send */
@@ -129,7 +130,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                       ucp_datatype_class_names[select_param->dt_class]);
             return 0;
         }
-    } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE) &&
+    } else if (!(flags & UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE) &&
                (select_param->dt_class != UCP_DATATYPE_GENERIC) &&
                !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(select_param->mem_type)) {
         /* If zero-copy is off, the memory must be host-accessible for
@@ -162,7 +163,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         }
 
         /* Check iface capabilities */
-        iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
+        iface_attr = ucp_proto_common_get_iface_attr(params, lane);
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
             ucs_trace("lane[%d]: no cap 0x%"PRIx64, lane, tl_cap_flags);
             continue;
@@ -172,7 +173,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         md_attr  = &context->tl_mds[md_index].attr;
 
         /* Check memory registration capabilities for zero-copy case */
-        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+        if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
             if (md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
@@ -198,7 +199,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         }
 
         /* Check remote access capabilities */
-        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+        if (flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
             ucs_assert(rkey_config_key != NULL);
             if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
                 if (!(rkey_config_key->md_map &
@@ -221,6 +222,26 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 
     ucs_trace("selected %d lanes", num_lanes);
     return num_lanes;
+}
+
+ucp_lane_index_t
+ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params)
+{
+    ucp_lane_index_t lane = UCP_NULL_LANE, num_lanes;
+    ucp_md_map_t dummy_md_map;
+
+    num_lanes = ucp_proto_common_find_lanes(params, 0, UCP_LANE_TYPE_AM,
+                                            UCT_IFACE_FLAG_AM_BCOPY, 1, 0,
+                                            &lane, &dummy_md_map);
+    if (num_lanes == 0) {
+        ucs_debug("no active message lane for %s", params->proto_name);
+        return UCP_NULL_LANE;
+    }
+
+    ucs_assert(num_lanes    == 1);
+    ucs_assert(dummy_md_map == 0);
+
+    return lane;
 }
 
 static ucs_linear_func_t
@@ -284,7 +305,8 @@ ucp_proto_common_calc_completion(const ucp_proto_common_init_params_t *params,
     ucp_proto_perf_range_t *range =
             &params->super.caps->ranges[params->super.caps->num_ranges++];
 
-    if (perf_params->is_multi) {
+    if (perf_params->is_multi ||
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY)) {
         /* Multi fragment protocol has no limit */
         range->max_length = SIZE_MAX;
     } else {
@@ -324,7 +346,9 @@ ucp_proto_common_calc_latency(const ucp_proto_common_init_params_t *params,
     /* If the 1st range already covers up to SIZE_MAX, or the protocol does not
      * support multi-fragment - no more ranges are created.
      */
-    if ((range->max_length == SIZE_MAX) || !perf_params->is_multi) {
+    if ((range->max_length == SIZE_MAX) ||
+        (!perf_params->is_multi &&
+         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY))) {
         return;
     }
 
@@ -411,7 +435,13 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     uct_time     = ucs_linear_func_make(latency, 1.0 / bandwidth);
     pack_time    = ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
 
-    if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) {
+        /* Latency of response */
+        ucp_proto_common_calc_latency(params, perf_params, pack_time, uct_time,
+                                      frag_size, overhead);
+        /* Latency of request */
+        ucp_proto_common_add_perf(&params->super, ucs_linear_func_make(latency, 0));
+    } else if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
         /* Calculate time to complete the send operation locally */
         ucp_proto_common_calc_completion(params, perf_params, pack_time,
                                          uct_time, frag_size, latency);
@@ -423,6 +453,16 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     }
 
     ucp_proto_common_add_overheads(params, overhead, perf_params->reg_md_map);
+}
+
+void ucp_proto_request_zcopy_completion(uct_completion_t *self, ucs_status_t status)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+
+    /* request should NOT be on pending queue because when we decrement the last
+     * refcount the request is not on the pending queue any more
+     */
+    ucp_proto_request_zcopy_complete(req, status);
 }
 
 void ucp_proto_request_select_error(ucp_request_t *req,

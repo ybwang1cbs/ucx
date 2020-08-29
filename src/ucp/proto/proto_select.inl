@@ -123,4 +123,14 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     select_param->padding[1] = 0;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_select_is_short(ucp_ep_h ep,
+                          const ucp_proto_select_short_t *proto_short,
+                          ssize_t length)
+{
+    return ucs_likely(length <= proto_short->memtype_off_thresh) ||
+           ((length <= proto_short->memtype_on_thresh) &&
+            ucp_memory_type_cache_is_empty(ep->worker->context));
+}
+
 #endif

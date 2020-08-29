@@ -20,11 +20,13 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/debug/assert.h>
 #include <ucp/dt/dt.h>
+#include <ucp/proto/proto_common.h> /* for complete_cb */
 #include <ucp/rma/rma.h>
 #include <ucp/wireup/wireup.h>
 
 
 #define UCP_REQUEST_ID_INVALID      0
+#define UCP_REQUEST_TINY_AM_MAX     12
 
 
 #define ucp_trace_req(_sreq, _message, ...) \
@@ -167,6 +169,14 @@ struct ucp_request {
                 } proto;
 
                 struct {
+                    ucp_proto_complete_cb_t comp_cb;
+                    uint8_t                 am_id;
+                    uint8_t                 length;
+                    ucp_lane_index_t        lane;
+                    char                    payload[UCP_REQUEST_TINY_AM_MAX];
+                } tiny_am;
+
+                struct {
                     uct_pending_req_t    *req;
                     ucp_wireup_ep_t      *wireup_ep;
                 } proxy;
@@ -204,6 +214,18 @@ struct ucp_request {
                                                        * from sender side */
                     size_t            offset;         /* offset in recv buffer */
                 } rndv_rtr;
+
+                struct {
+                     uint64_t             remote_address;  /* address of the remote data buffer */
+                     uint64_t             remote_request;  /* pointer to the remote request */
+                     ucp_rkey_h           rkey;            /* key for remote send buffer */
+
+                     union {
+                         struct {
+                             ucp_request_t *recv_req;       /* receive request on the recv side */
+                         } rndv_recv;
+                     };
+                } remote_op;
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
@@ -279,6 +301,7 @@ struct ucp_request {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
+            size_t                count;
             size_t                length;   /* Total length, in bytes */
             ucs_memory_type_t     mem_type; /* Memory type */
             ucp_dt_state_t        state;
@@ -410,5 +433,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
+
+ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
 
 #endif

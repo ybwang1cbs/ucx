@@ -690,7 +690,8 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_mpool_free(worker, mp, chunk);
 }
 
-void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
+void ucp_mem_print_info(const char *mem_size, ucp_context_h context, ucp_ep_h ep,
+                        FILE *stream)
 {
     size_t min_page_size, max_page_size;
     ucp_mem_map_params_t mem_params;
@@ -754,6 +755,30 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
     }
     fprintf(stream, "\n");
     fprintf(stream, "#\n");
+
+    if (ep != NULL) {
+        void *rkey_buffer;
+        size_t rkey_size;
+
+        status = ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size);
+        if (status != UCS_OK) {
+            printf("<Failed to pack rkey>\n");
+        } else {
+            ucp_rkey_h rkey;
+            status = ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey);
+            if (status != UCS_OK) {
+                printf("<Failed to unpack rkey>\n");
+            } else {
+                {
+                    char dummy;
+                    ucp_get(ep, &dummy, 1, (uintptr_t)memh->address, rkey);
+                }
+                ucp_rkey_print_info(ep, rkey, stream);
+                ucp_rkey_destroy(rkey);
+            }
+            ucp_rkey_buffer_release(rkey_buffer);
+        }
+    }
 
     status = ucp_mem_unmap(context, memh);
     if (status != UCS_OK) {

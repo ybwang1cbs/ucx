@@ -2438,7 +2438,8 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
-void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream);
+void ucp_mem_print_info(const char *mem_size, ucp_context_h context, ucp_ep_h ep,
+                        FILE *stream);
 
 
 /**
@@ -2613,6 +2614,8 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
  */
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
 
+
+void ucp_rkey_print_info(ucp_ep_h ep, ucp_rkey_h rkey, FILE *stream);
 
 /**
  * @ingroup UCP_MEM

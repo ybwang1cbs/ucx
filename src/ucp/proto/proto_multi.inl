@@ -22,11 +22,29 @@ ucp_proto_multi_request_init(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE size_t
+ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
+{
+    return (size_t)(
+            lane_weight * UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT) / total_weight +
+            0.5);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_multi_scaled_length(const ucp_proto_multi_lane_priv_t *lpriv,
+                              size_t length)
+{
+    return (lpriv->weight * length + UCS_MASK(UCP_PROTO_MULTI_WEIGHT_SHIFT)) >>
+           UCP_PROTO_MULTI_WEIGHT_SHIFT;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_multi_max_payload(ucp_request_t *req,
                             const ucp_proto_multi_lane_priv_t *lpriv,
                             size_t hdr_size)
 {
-    return lpriv->max_frag - hdr_size;
+    size_t scaled_length =
+            ucp_proto_multi_scaled_length(lpriv, req->send.dt_iter.length);
+    return ucs_min(scaled_length, lpriv->max_frag - hdr_size);
 }
 
 static size_t UCS_F_ALWAYS_INLINE
@@ -107,6 +125,33 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
     req->send.multi_lane_idx = lane_idx;
 
     return UCS_INPROGRESS;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
+                               ucp_proto_send_multi_cb_t send_func,
+                               uct_completion_callback_t comp_func)
+{
+    ucp_request_t *req                 = ucs_container_of(uct_req, ucp_request_t,
+                                                          send.uct);
+    const ucp_proto_multi_priv_t *priv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        status = ucp_proto_request_zcopy_init(req, priv->reg_md_map, comp_func);
+        if (status != UCS_OK) {
+            // TODO fallback to other protocol
+            ucp_proto_request_zcopy_complete(req, status);
+            return UCS_OK;
+        }
+
+        ucp_proto_multi_request_init(req);
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    return ucp_proto_multi_progress(req, send_func,
+                                    ucp_request_invoke_uct_completion,
+                                    UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
 #endif

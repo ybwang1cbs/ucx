@@ -16,14 +16,18 @@
 #define UCP_WORKER_NAME_MAX          32   /* Worker name for debugging */
 #define UCP_MIN_BCOPY                64   /* Minimal size for bcopy */
 #define UCP_FEATURE_AMO              (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)
+#define UCP_MAX_IOV                  16UL
+#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE3(uint, _bits, _t)
 
 /* Resources */
 #define UCP_MAX_RESOURCES            64 /* up to 64 only due to tl_bitmap usage */
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
+UCP_UINT_TYPE(UCP_MAX_RESOURCES)     ucp_tl_map_t;
+UCP_UINT_TYPE(UCP_MAX_RESOURCES)     ucp_dev_map_t;
+#define UCP_TL_MAP_ALL               UCS_PP_TOKENPASTE3(UINT, UCP_MAX_RESOURCES, _MAX)
 
 /* MDs */
-#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE3(uint, _bits, _t)
 #define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
 typedef ucp_rsc_index_t              ucp_md_index_t;
 #define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
@@ -69,6 +73,8 @@ typedef enum {
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
+    UCP_OP_ID_RNDV_SEND,
+    UCP_OP_ID_RNDV_RECV,
     UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
@@ -136,6 +142,7 @@ typedef enum {
     UCP_RNDV_MODE_AUTO,      /* Runtime automatically chooses optimal scheme to use */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
+
 
 /**
  * Active message tracer.

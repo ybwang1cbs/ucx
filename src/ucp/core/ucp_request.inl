@@ -13,12 +13,16 @@
 
 
 #include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucp/dt/dt.inl>
+#include <ucp/dt/datatype_iter.inl>
 #include <inttypes.h>
+
+#include <ucp/proto/proto_select.inl>
 
 
 #define UCP_REQUEST_FLAGS_FMT \
@@ -239,6 +243,8 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
         return 0;
     } else if (status != UCS_ERR_NO_RESOURCE) {
         /* Unexpected error */
+        // TODO pending function should NOT return any other error. it should
+        // complete the request with failure status and return UCS_OK.
         ucp_request_complete_send(req, status);
         *req_status = status;
         return 1;
@@ -256,6 +262,7 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
  * @param [in]  pending_flags   flags to be passed to UCT if request will be
  *                              added to pending queue.
  *
+ * TODO it should return void
  * @return UCS_OK - completed (callback will not be called)
  *         UCS_INPROGRESS - started but not completed
  *         other error - failure
@@ -687,6 +694,16 @@ ucp_send_request_get_id(ucp_request_t *req)
 {
     return ucp_worker_get_request_id(req->send.ep->worker, req,
                                      ucp_ep_use_indirect_id(req->send.ep));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_invoke_uct_completion(ucp_request_t *req, ucs_status_t status)
+{
+    uct_completion_t *comp = &req->send.state.uct_comp;
+
+    if (--comp->count == 0) {
+        comp->func(comp, status);
+    }
 }
 
 #endif
