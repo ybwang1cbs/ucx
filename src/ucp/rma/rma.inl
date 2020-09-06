@@ -95,4 +95,11 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     }
 }
 
+static UCS_F_ALWAYS_INLINE uct_rkey_t
+ucp_rma_request_get_tl_rkey(ucp_request_t *req, ucp_md_index_t rkey_index)
+{
+    ucs_assert(rkey_index != UCP_NULL_RESOURCE);
+    return req->send.rma.rkey->tl_rkey[rkey_index].rkey.rkey;
+}
+
 #endif

@@ -972,6 +972,7 @@ ucp_wireup_is_am_required(const ucp_wireup_select_params_t *select_params,
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
         (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
                                             UCP_FEATURE_STREAM | 
+                                            UCP_FEATURE_RMA |
                                             UCP_FEATURE_AM))) {
         return 1;
     }

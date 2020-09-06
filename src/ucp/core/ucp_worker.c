@@ -1835,6 +1835,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
 {
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucs_status_t status;
     khiter_t khiter;
     int khret;
 
@@ -1843,18 +1844,24 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
                   worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
-        return UCS_ERR_EXCEEDS_LIMIT;
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err;
     }
 
     /* initialize rkey configuration */
     rkey_cfg_index   = worker->rkey_config_count;
     rkey_config      = &worker->rkey_config[rkey_cfg_index];
     rkey_config->key = *key;
+    status           = ucp_proto_select_init(&rkey_config->proto_select);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
                     &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err_proto_cleanup;
     }
 
     /* we should not get into this function if key already exists */
@@ -1865,6 +1872,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     ++worker->rkey_config_count;
     *cfg_index_p = rkey_cfg_index;
     return UCS_OK;
+
+err_proto_cleanup:
+    ucp_proto_select_cleanup(&rkey_config->proto_select);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)

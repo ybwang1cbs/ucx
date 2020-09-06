@@ -22,8 +22,9 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
     ucp_put_hdr_t *puth = dest;
     size_t length;
 
-    puth->address = req->send.rma.remote_addr;
-    puth->ep_id   = ucp_ep_remote_id(ep);
+    puth->address  = req->send.rma.remote_addr;
+    puth->ep_id    = ucp_ep_remote_id(ep);
+    puth->mem_type = UCS_MEMORY_TYPE_HOST;
 
     ucs_assert(puth->ep_id != UCP_EP_ID_INVALID);
 
@@ -150,7 +151,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     ucp_put_hdr_t *puth = data;
     ucp_worker_h worker = arg;
 
-    memcpy((void*)puth->address, puth + 1, length - sizeof(*puth));
+    ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
+                         length - sizeof(*puth), puth->mem_type);
     ucp_rma_sw_send_cmpl(ucp_worker_get_ep_by_id(worker, puth->ep_id));
     return UCS_OK;
 }
@@ -268,8 +270,9 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     switch (id) {
     case UCP_AM_ID_PUT:
         puth = data;
-        snprintf(buffer, max, "PUT [addr 0x%"PRIx64" ep_id 0x%"PRIx64"]",
-                 puth->address, puth->ep_id);
+        snprintf(buffer, max, "PUT [addr 0x%"PRIx64" ep_id 0x%"PRIx64" %s]",
+                 puth->address, puth->ep_id,
+                 ucs_memory_type_names[puth->mem_type]);
         header_len = sizeof(*puth);
         break;
     case UCP_AM_ID_GET_REQ:

@@ -31,7 +31,16 @@ public:
                                      tls, FLUSH_EP, result);
         generate_test_params_variant(ctx_params, name, test_case_name + "/flush_worker",
                                      tls, FLUSH_WORKER, result);
+        generate_test_params_variant(ctx_params, name, test_case_name + "/flush_ep_proto",
+                                     tls, FLUSH_EP | ENABLE_PROTO, result);
         return result;
+    }
+
+    virtual void init() {
+        if (enable_proto()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+        test_ucp_memheap::init();
     }
 
     void put_b(size_t size, void *target_ptr, ucp_rkey_h rkey,
@@ -63,7 +72,7 @@ public:
     }
 
 protected:
-    void test_mem_types(send_func_t send_func) {
+    void test_mem_types(send_func_t send_func, bool proto_supported) {
         std::vector<std::vector<ucs_memory_type_t> > pairs =
                 ucs::supported_mem_type_pairs();
 
@@ -71,8 +80,9 @@ protected:
 
             // TODO remove this check after memory types is fully supported by
             // RMA API
-            if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][0]) ||
-                !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][1])) {
+            if (!(enable_proto() && proto_supported) &&
+                (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][0]) ||
+                 !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][1]))) {
                 continue;
             }
 
@@ -87,8 +97,9 @@ protected:
 private:
     /* Test variants */
     enum {
-        FLUSH_EP,
-        FLUSH_WORKER
+        FLUSH_EP      = 0,
+        FLUSH_WORKER  = 1,
+        ENABLE_PROTO  = UCS_BIT(2)
     };
 
     ucs_status_ptr_t do_put(size_t size, void *target_ptr, ucp_rkey_h rkey,
@@ -143,24 +154,28 @@ private:
     }
 
     bool is_ep_flush() {
-        return GetParam().variant == FLUSH_EP;
+        return (GetParam().variant & ~ENABLE_PROTO) == FLUSH_EP;
+    }
+
+    bool enable_proto() {
+        return GetParam().variant & ENABLE_PROTO;
     }
 };
 
 UCS_TEST_P(test_ucp_rma, put_blocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b), true);
 }
 
 UCS_TEST_P(test_ucp_rma, put_nonblocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi), true);
 }
 
 UCS_TEST_P(test_ucp_rma, get_blocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), false);
 }
 
 UCS_TEST_P(test_ucp_rma, get_nonblocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi), false);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_rma)
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)

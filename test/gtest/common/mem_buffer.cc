@@ -43,20 +43,41 @@
 #endif
 
 
+bool mem_buffer::is_cuda_supported()
+{
+#if HAVE_CUDA
+    int num_gpus;
+    cudaError_t cudaErr = cudaGetDeviceCount(&num_gpus);
+    return (cudaErr == cudaSuccess) || (num_gpus > 0);
+#else
+    return false;
+#endif
+}
+
+bool mem_buffer::is_rocm_supported()
+{
+#if HAVE_ROCM
+    hsa_status_t status = hsa_init();
+    return status == HSA_STATUS_SUCCESS;
+#else
+    return false;
+#endif
+}
+
 std::vector<ucs_memory_type_t> mem_buffer::supported_mem_types()
 {
     static std::vector<ucs_memory_type_t> vec;
 
     if (vec.empty()) {
         vec.push_back(UCS_MEMORY_TYPE_HOST);
-#if HAVE_CUDA
-        vec.push_back(UCS_MEMORY_TYPE_CUDA);
-        vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
-#endif
-#if HAVE_ROCM
-        vec.push_back(UCS_MEMORY_TYPE_ROCM);
-        vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
-#endif
+        if (is_cuda_supported()) {
+            vec.push_back(UCS_MEMORY_TYPE_CUDA);
+            vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        }
+        if (is_rocm_supported()) {
+            vec.push_back(UCS_MEMORY_TYPE_ROCM);
+            vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
+        }
     }
 
     return vec;
