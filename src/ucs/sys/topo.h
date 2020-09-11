@@ -76,6 +76,18 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
 
 
 /**
+ * Return system device display name
+ *
+ * @param [in]  sys_dev  System device id, as returned from
+ *                       @ref ucs_topo_find_device_by_bus_id
+ * @param [out] buffer   String buffer, filled the device name
+ * @param [in]  max      Maximal size of @a buffer
+ */
+const char *
+ucs_topo_sys_device_name(ucs_sys_device_t sys_dev, char *buffer, size_t max);
+
+
+/**
  * Print a map indicating the topology information between system
  * devices discovered
  */
